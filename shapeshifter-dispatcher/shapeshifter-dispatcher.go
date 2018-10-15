@@ -54,7 +54,7 @@ import (
 	_ "github.com/OperatorFoundation/obfs4/proxy_dialers/proxy_http"
 	_ "github.com/OperatorFoundation/obfs4/proxy_dialers/proxy_socks4"
 	"github.com/shaynem/shapeshifter-dispatcher/transports"
-	"github.com/shaynem/shapeshifter-transports/transports/base"
+	"github.com/OperatorFoundation/shapeshifter-transports/transports/base"
 )
 
 const (
