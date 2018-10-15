@@ -41,20 +41,20 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/OperatorFoundation/shapeshifter-dispatcher/common/log"
-	"github.com/OperatorFoundation/shapeshifter-dispatcher/common/pt_extras"
-	"github.com/OperatorFoundation/shapeshifter-dispatcher/common/termmon"
+	"github.com/shaynem/shapeshifter-dispatcher/common/log"
+	"github.com/shaynem/shapeshifter-dispatcher/common/pt_extras"
+	"github.com/shaynem/shapeshifter-dispatcher/common/termmon"
 	"github.com/OperatorFoundation/shapeshifter-ipc"
 
-	"github.com/OperatorFoundation/shapeshifter-dispatcher/modes/pt_socks5"
-	"github.com/OperatorFoundation/shapeshifter-dispatcher/modes/stun_udp"
-	"github.com/OperatorFoundation/shapeshifter-dispatcher/modes/transparent_tcp"
-	"github.com/OperatorFoundation/shapeshifter-dispatcher/modes/transparent_udp"
+	"github.com/shaynem/shapeshifter-dispatcher/modes/pt_socks5"
+	"github.com/shaynem/shapeshifter-dispatcher/modes/stun_udp"
+	"github.com/shaynem/shapeshifter-dispatcher/modes/transparent_tcp"
+	"github.com/shaynem/shapeshifter-dispatcher/modes/transparent_udp"
 
-	_ "github.com/OperatorFoundation/obfs4/proxy_dialers/proxy_http"
+	_ "github.com/shaynem/obfs4/proxy_dialers/proxy_http"
 	_ "github.com/OperatorFoundation/obfs4/proxy_dialers/proxy_socks4"
-	"github.com/OperatorFoundation/shapeshifter-dispatcher/transports"
-	"github.com/OperatorFoundation/shapeshifter-transports/transports/base"
+	"github.com/shaynem/shapeshifter-dispatcher/transports"
+	"github.com/shaynem/shapeshifter-transports/transports/base"
 )
 
 const (
