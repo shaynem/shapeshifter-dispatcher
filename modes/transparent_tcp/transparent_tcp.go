@@ -41,6 +41,8 @@ import (
 	"github.com/OperatorFoundation/shapeshifter-dispatcher/common/log"
 	"github.com/OperatorFoundation/shapeshifter-dispatcher/common/termmon"
 	"github.com/OperatorFoundation/shapeshifter-ipc"
+	"github.com/OperatorFoundation/shapeshifter-transports/transports/base"
+	"github.com/OperatorFoundation/shapeshifter-transports/transports/meeklite"
 	"github.com/OperatorFoundation/shapeshifter-transports/transports/obfs2"
 	"github.com/OperatorFoundation/shapeshifter-transports/transports/obfs4"
 	"github.com/OperatorFoundation/shapeshifter-transports/transports/shadow"
@@ -87,7 +89,7 @@ func clientHandler(target string, termMon *termmon.TermMonitor, name string, opt
 	termMon.OnHandlerStart()
 	defer termMon.OnHandlerFinish()
 
-	var dialer func(address string) net.Conn
+	var transport base.Transport
 
 	args, argsErr := pt.ParsePT2ClientParameters(options)
 	if argsErr != nil {
@@ -98,15 +100,24 @@ func clientHandler(target string, termMon *termmon.TermMonitor, name string, opt
 	// Deal with arguments.
 	switch name {
 	case "obfs2":
-		transport := obfs2.NewObfs2Transport()
-		dialer = transport.Dial
+		transport = obfs2.NewObfs2Transport()
+	case "meeklite":
+		if url, ok := args["url"]; ok {
+			if front, ok2 := args["front"]; ok2 {
+				transport = meeklite.NewMeekTransportWithFront(url[0], front[0])
+			} else {
+				transport = meeklite.NewMeekTransport(url[0])
+			}
+		} else {
+			log.Errorf("meeklite transport missing URL argument: %s", args)
+			return
+		}
 	case "obfs4":
 		if cert, ok := args["cert"]; ok {
 			if iatModeStr, ok2 := args["iatMode"]; ok2 {
 				iatMode, err := strconv.Atoi(iatModeStr[0])
 				if err == nil {
-					transport := obfs4.NewObfs4Client(cert[0], iatMode)
-					dialer = transport.Dial
+					transport = obfs4.NewObfs4Client(cert[0], iatMode)
 				} else {
 					log.Errorf("obfs4 transport bad iatMode value: %s %s", iatModeStr[0], err)
 					return
@@ -122,8 +133,7 @@ func clientHandler(target string, termMon *termmon.TermMonitor, name string, opt
 	case "shadow":
 		if password, ok := args["password"]; ok {
 			if cipher, ok2 := args["cipherName"]; ok2 {
-				transport := shadow.NewShadowClient(password[0], cipher[0])
-				dialer = transport.Dial
+				transport = shadow.NewShadowClient(password[0], cipher[0])
 			} else {
 				log.Errorf("shadow transport missing cipher argument: %s", args)
 				return
@@ -137,7 +147,7 @@ func clientHandler(target string, termMon *termmon.TermMonitor, name string, opt
 		return
 	}
 
-	f := dialer
+	f := transport.Dial
 
 	// Obtain the proxy dialer if any, and create the outgoing TCP connection.
 	// dialFn := proxy.Direct.Dial
@@ -174,12 +184,12 @@ func clientHandler(target string, termMon *termmon.TermMonitor, name string, opt
 	return
 }
 
-func ServerSetup(termMon *termmon.TermMonitor, bindaddrString string, ptServerInfo pt.ServerInfo, statedir string, options string) (launched bool, listeners []net.Listener) {
+func ServerSetup(termMon *termmon.TermMonitor, bindaddrString string, ptServerInfo pt.ServerInfo, statedir string, options string) (launched bool, listeners []base.TransportListener) {
 	// Launch each of the server listeners.
 	for _, bindaddr := range ptServerInfo.Bindaddrs {
 		name := bindaddr.MethodName
 
-		var listen func(address string) net.Listener
+		var transport base.Transport
 
 		args, argsErr := pt.ParsePT2ServerParameters(options)
 		if argsErr != nil {
@@ -190,11 +200,12 @@ func ServerSetup(termMon *termmon.TermMonitor, bindaddrString string, ptServerIn
 		// Deal with arguments.
 		switch name {
 		case "obfs2":
-			transport := obfs2.NewObfs2Transport()
-			listen = transport.Listen
+			transport = obfs2.NewObfs2Transport()
+		case "meeklite":
+			log.Errorf("meeklite transport not supported on server")
+			return
 		case "obfs4":
-			transport := obfs4.NewObfs4Server(statedir)
-			listen = transport.Listen
+			transport = obfs4.NewObfs4Server(statedir)
 		case "shadow":
 			shargs, aok := args["shadow"]
 			if !aok {
@@ -211,14 +222,13 @@ func ServerSetup(termMon *termmon.TermMonitor, bindaddrString string, ptServerIn
 				return false, nil
 			}
 
-			transport := shadow.NewShadowServer(password, cipherName)
-			listen = transport.Listen
+			transport = shadow.NewShadowServer(password, cipherName)
 		default:
 			log.Errorf("Unknown transport: %s", name)
 			return false, nil
 		}
 
-		f := listen
+		f := transport.Listen
 
 		transportLn := f(bindaddr.Addr.String())
 
@@ -258,10 +268,10 @@ func getServerBindaddrs(serverBindaddr string) ([]pt.Bindaddr, error) {
 	return result, nil
 }
 
-func serverAcceptLoop(termMon *termmon.TermMonitor, name string, ln net.Listener, info *pt.ServerInfo) error {
+func serverAcceptLoop(termMon *termmon.TermMonitor, name string, ln base.TransportListener, info *pt.ServerInfo) error {
 	defer ln.Close()
 	for {
-		conn, err := ln.Accept()
+		conn, err := ln.TransportAccept()
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
 				return err
@@ -272,22 +282,26 @@ func serverAcceptLoop(termMon *termmon.TermMonitor, name string, ln net.Listener
 	}
 }
 
-func serverHandler(termMon *termmon.TermMonitor, name string, remote net.Conn, info *pt.ServerInfo) {
+func serverHandler(termMon *termmon.TermMonitor, name string, remote base.TransportConn, info *pt.ServerInfo) {
+	defer remote.NetworkConn().Close()
 	termMon.OnHandlerStart()
 	defer termMon.OnHandlerFinish()
 
+	addrStr := log.ElideAddr(remote.NetworkConn().RemoteAddr().String())
+	log.Infof("%s(%s) - new connection", name, addrStr)
+
 	// Connect to the orport.
-	orConn, err := pt.DialOr(info, remote.RemoteAddr().String(), name)
+	orConn, err := pt.DialOr(info, remote.NetworkConn().RemoteAddr().String(), name)
 	if err != nil {
-		log.Errorf("%s - failed to connect to ORPort: %s", name, log.ElideError(err))
+		log.Errorf("%s(%s) - failed to connect to ORPort: %s", name, addrStr, log.ElideError(err))
 		return
 	}
 	defer orConn.Close()
 
 	if err = copyLoop(orConn, remote); err != nil {
-		log.Warnf("%s - closed connection: %s", name, log.ElideError(err))
+		log.Warnf("%s(%s) - closed connection: %s", name, addrStr, log.ElideError(err))
 	} else {
-		log.Infof("%s - closed connection", name)
+		log.Infof("%s(%s) - closed connection", name, addrStr)
 	}
 
 	return
