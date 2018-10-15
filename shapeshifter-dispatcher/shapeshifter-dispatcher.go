@@ -51,7 +51,7 @@ import (
 	"github.com/shaynem/shapeshifter-dispatcher/modes/transparent_tcp"
 	"github.com/shaynem/shapeshifter-dispatcher/modes/transparent_udp"
 
-	_ "github.com/shaynem/obfs4/proxy_dialers/proxy_http"
+	_ "github.com/OperatorFoundation/obfs4/proxy_dialers/proxy_http"
 	_ "github.com/OperatorFoundation/obfs4/proxy_dialers/proxy_socks4"
 	"github.com/shaynem/shapeshifter-dispatcher/transports"
 	"github.com/shaynem/shapeshifter-transports/transports/base"
